@@ -485,7 +485,7 @@
  * Override with M92
  *                                      X, Y, Z, E0 [, E1[, E2[, E3[, E4]]]]
  */
-#define DEFAULT_AXIS_STEPS_PER_UNIT   {80,80,398,94.4962144}
+#define DEFAULT_AXIS_STEPS_PER_UNIT   {80,80,398,100}
 /**
  * Default Max Feed Rate (mm/s)
  * Override with M203
@@ -873,9 +873,9 @@
   //========================= Unified Bed Leveling ============================
   //===========================================================================
 
-  #define UBL_MESH_INSET 1          // Mesh inset margin on print area
-  #define GRID_MAX_POINTS_X 5       // Don't use more than 15 points per axis, implementation limited.
-  #define GRID_MAX_POINTS_Y GRID_MAX_POINTS_X
+  #define UBL_MESH_INSET 10          // Mesh inset margin on print area
+  #define GRID_MAX_POINTS_X 6       // Don't use more than 15 points per axis, implementation limited.
+  #define GRID_MAX_POINTS_Y 9
   #define UBL_PROBE_PT_1_X 20       // These set the probe locations for when UBL does a 3-Point leveling
   #define UBL_PROBE_PT_1_Y 160      // of the mesh.
   #define UBL_PROBE_PT_2_X 20
