@@ -63,6 +63,8 @@
 #include "temperature.h"
 #include "ultralcd.h"
 #include "language.h"
+#include "ubl.h"
+#include "gcode.h"
 
 #include "Marlin.h"
 
@@ -392,7 +394,7 @@ void Planner::recalculate() {
     thermalManager.setTargetHotend(t, 0);
   }
 
-#endif //AUTOTEMP
+#endif // AUTOTEMP
 
 /**
  * Maintain fans, paste extruder pressure,
@@ -468,14 +470,9 @@ void Planner::check_axes_activity() {
           if (fan_kick_end[f] == 0) { \
             fan_kick_end[f] = ms + FAN_KICKSTART_TIME; \
             tail_fan_speed[f] = 255; \
-          } else { \
-            if (PENDING(ms, fan_kick_end[f])) { \
-              tail_fan_speed[f] = 255; \
-            } \
-          } \
-        } else { \
-          fan_kick_end[f] = 0; \
-        }
+          } else if (PENDING(ms, fan_kick_end[f])) \
+            tail_fan_speed[f] = 255; \
+        } else fan_kick_end[f] = 0
 
       #if HAS_FAN0
         KICKSTART_FAN(0);
@@ -487,17 +484,17 @@ void Planner::check_axes_activity() {
         KICKSTART_FAN(2);
       #endif
 
-    #endif //FAN_KICKSTART_TIME
+    #endif // FAN_KICKSTART_TIME
 
     #if ENABLED(FAN_SOFT_PWM)
       #if HAS_FAN0
-        thermalManager.fanSpeedSoftPwm[0] = CALC_FAN_SPEED(0);
+        thermalManager.soft_pwm_amount_fan[0] = CALC_FAN_SPEED(0);
       #endif
       #if HAS_FAN1
-        thermalManager.fanSpeedSoftPwm[1] = CALC_FAN_SPEED(1);
+        thermalManager.soft_pwm_amount_fan[1] = CALC_FAN_SPEED(1);
       #endif
       #if HAS_FAN2
-        thermalManager.fanSpeedSoftPwm[2] = CALC_FAN_SPEED(2);
+        thermalManager.soft_pwm_amount_fan[2] = CALC_FAN_SPEED(2);
       #endif
     #else
       #if HAS_FAN0
@@ -533,11 +530,22 @@ void Planner::check_axes_activity() {
    */
   void Planner::apply_leveling(float &lx, float &ly, float &lz) {
 
+    #if ENABLED(AUTO_BED_LEVELING_UBL)
+      if (!ubl.state.active) return;
+      #if ENABLED(ENABLE_LEVELING_FADE_HEIGHT)
+        // if z_fade_height enabled (nonzero) and raw_z above it, no leveling required
+        if ((planner.z_fade_height) && (planner.z_fade_height <= RAW_Z_POSITION(lz))) return;
+        lz += ubl.state.z_offset + ubl.get_z_correction(lx, ly) * ubl.fade_scaling_factor_for_z(lz);
+      #else // no fade
+        lz += ubl.state.z_offset + ubl.get_z_correction(lx,ly);
+      #endif // FADE
+    #endif // UBL
+
     #if HAS_ABL
       if (!abl_enabled) return;
     #endif
 
-    #if ENABLED(ENABLE_LEVELING_FADE_HEIGHT)
+    #if ENABLED(ENABLE_LEVELING_FADE_HEIGHT) && DISABLED(AUTO_BED_LEVELING_UBL)
       static float z_fade_factor = 1.0, last_raw_lz = -999.0;
       if (z_fade_height) {
         const float raw_lz = RAW_Z_POSITION(lz);
@@ -585,6 +593,41 @@ void Planner::check_axes_activity() {
   }
 
   void Planner::unapply_leveling(float logical[XYZ]) {
+
+    #if ENABLED(AUTO_BED_LEVELING_UBL)
+
+      if (ubl.state.active) {
+
+        const float z_physical = RAW_Z_POSITION(logical[Z_AXIS]);
+        const float z_ublmesh  = ubl.get_z_correction(logical[X_AXIS], logical[Y_AXIS]);
+        const float z_virtual  = z_physical - ubl.state.z_offset - z_ublmesh;
+              float z_logical  = LOGICAL_Z_POSITION(z_virtual);
+
+        #if ENABLED(ENABLE_LEVELING_FADE_HEIGHT)
+
+          // for P=physical_z, L=logical_z, M=mesh_z, O=z_offset, H=fade_height,
+          // Given P=L+O+M(1-L/H) (faded mesh correction formula for L<H)
+          //  then L=P-O-M(1-L/H)
+          //    so L=P-O-M+ML/H
+          //    so L-ML/H=P-O-M
+          //    so L(1-M/H)=P-O-M
+          //    so L=(P-O-M)/(1-M/H) for L<H
+
+          if (planner.z_fade_height) {
+            if (z_logical < planner.z_fade_height )
+              z_logical = z_logical / (1.0 - (z_ublmesh * planner.inverse_z_fade_height));
+            if (z_logical >= planner.z_fade_height)
+              z_logical = LOGICAL_Z_POSITION(z_physical - ubl.state.z_offset);
+          }
+
+        #endif // ENABLE_LEVELING_FADE_HEIGHT
+
+        logical[Z_AXIS] = z_logical;
+      }
+
+      return; // don't fall thru to other ENABLE_LEVELING_FADE_HEIGHT logic
+
+    #endif
 
     #if HAS_ABL
       if (!abl_enabled) return;
@@ -692,7 +735,7 @@ void Planner::_buffer_line(const float &a, const float &b, const float &c, const
   #endif
   SERIAL_ECHOPAIR(" (", dc);
   SERIAL_CHAR(')');
-  SERIAL_EOL;
+  SERIAL_EOL();
   //*/
 
   // DRYRUN ignores all temperature constraints and assures that the extruder is instantly satisfied
@@ -718,7 +761,7 @@ void Planner::_buffer_line(const float &a, const float &b, const float &c, const
           position_float[E_AXIS] = e;
           de_float = 0;
         #endif
-        SERIAL_ECHO_START;
+        SERIAL_ECHO_START();
         SERIAL_ECHOLNPGM(MSG_ERR_COLD_EXTRUDE_STOP);
       }
       #if ENABLED(PREVENT_LENGTHY_EXTRUDE)
@@ -729,7 +772,7 @@ void Planner::_buffer_line(const float &a, const float &b, const float &c, const
             position_float[E_AXIS] = e;
             de_float = 0;
           #endif
-          SERIAL_ECHO_START;
+          SERIAL_ECHO_START();
           SERIAL_ECHOLNPGM(MSG_ERR_LONG_EXTRUDE_STOP);
         }
       #endif
@@ -1372,7 +1415,7 @@ void Planner::_buffer_line(const float &a, const float &b, const float &c, const
       block->advance_rate = block->advance = 0;
 
     /**
-     SERIAL_ECHO_START;
+     SERIAL_ECHO_START();
      SERIAL_ECHOPGM("advance :");
      SERIAL_ECHO(block->advance/256.0);
      SERIAL_ECHOPGM("advance rate :");
@@ -1464,7 +1507,7 @@ void Planner::sync_from_steppers() {
 /**
  * Setters for planner position (also setting stepper position).
  */
-void Planner::set_position_mm(const AxisEnum axis, const float& v) {
+void Planner::set_position_mm(const AxisEnum axis, const float &v) {
   #if ENABLED(DISTINCT_E_FACTORS)
     const uint8_t axis_index = axis + (axis == E_AXIS ? active_extruder : 0);
     last_extruder = active_extruder;
@@ -1504,10 +1547,10 @@ void Planner::refresh_positioning() {
 #if ENABLED(AUTOTEMP)
 
   void Planner::autotemp_M104_M109() {
-    autotemp_enabled = code_seen('F');
-    if (autotemp_enabled) autotemp_factor = code_value_temp_diff();
-    if (code_seen('S')) autotemp_min = code_value_temp_abs();
-    if (code_seen('B')) autotemp_max = code_value_temp_abs();
+    autotemp_enabled = parser.seen('F');
+    if (autotemp_enabled) autotemp_factor = parser.value_celsius_diff();
+    if (parser.seen('S')) autotemp_min = parser.value_celsius();
+    if (parser.seen('B')) autotemp_max = parser.value_celsius();
   }
 
 #endif
