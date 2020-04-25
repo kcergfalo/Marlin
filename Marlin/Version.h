@@ -48,7 +48,7 @@
    * here we define this default string as the date where the latest release
    * version was tagged.
    */
-  #define STRING_DISTRIBUTION_DATE "2017-06-04 12:00"
+  #define STRING_DISTRIBUTION_DATE "2017-06-15 19:00"
 
   /**
    * Required minimum Configuration.h and Configuration_adv.h file versions.
@@ -70,7 +70,7 @@
   /**
    * Defines a generic printer name to be output to the LCD after booting Marlin.
    */
-  #define MACHINE_NAME "3D Printer"
+  #define MACHINE_NAME "This Printer"
 
   /**
    * The SOURCE_CODE_URL is the location where users will find the Marlin Source
@@ -78,12 +78,12 @@
    * has a distinct Github fork— the Source Code URL should just be the main
    * Marlin repository.
    */
-  #define SOURCE_CODE_URL "https://github.com/MarlinFirmware/Marlin"
+  #define SOURCE_CODE_URL "https://github.com/kcergfalo/Marlin"
 
   /**
    * Default generic printer UUID.
    */
-  #define DEFAULT_MACHINE_UUID "cede2a2f-41a2-4748-9b12-c55c62f367ff"
+  #define DEFAULT_MACHINE_UUID "7868bfe0-2605-42d3-b177-83fbfc1ea1e2"
 
   /**
    * The WEBSITE_URL is the location where users can get more information such as
